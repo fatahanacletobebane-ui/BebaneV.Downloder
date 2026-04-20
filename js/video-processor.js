@@ -28,7 +28,7 @@ async function processVideo() {
     }
     
     if (!platform) {
-        showError('Plataforma não suportada. Use links do YouTube, Facebook ou TikTok.');
+        showError('Plataforma não suportada. Use YouTube, Facebook ou TikTok.');
         return;
     }
 
@@ -42,14 +42,15 @@ async function processVideo() {
     result.classList.remove('active');
     error.classList.remove('active');
 
-    // Mostrar ads durante o processamento
-    AdsManager.customAds.render('ads-mid-content', Math.floor(Math.random() * 4));
+    // Mostrar ads
+    if (typeof AdsManager !== 'undefined') {
+        AdsManager.customAds.render('ads-mid-content', Math.floor(Math.random() * 4));
+    }
 
     try {
-        document.getElementById('loadingText').textContent = `Detectando ${platform}...`;
-        await new Promise(r => setTimeout(r, 1000));
+        document.getElementById('loadingText').textContent = `Analisando ${platform}...`;
+        await new Promise(r => setTimeout(r, 800));
 
-        // APIs gratuitas para download
         const apiData = await fetchVideoData(platform, url);
         
         if (!apiData || apiData.error) {
@@ -57,15 +58,11 @@ async function processVideo() {
         }
 
         displayResult(apiData, platform, url);
-        
-        // Salvar no Firebase
         saveDownloadToFirebase(apiData, platform);
-        
-        // Adicionar ao histórico local
-        addToHistory(apiData.title || 'Vídeo sem título', platform, selectedFormat);
+        addToHistory(apiData.title || 'Vídeo', platform, selectedFormat);
 
     } catch (err) {
-        showError(err.message || 'Erro ao processar vídeo. Verifique o link e tente novamente.');
+        showError(err.message || 'Erro ao processar vídeo.');
     } finally {
         btn.disabled = false;
         loading.classList.remove('active');
@@ -75,12 +72,10 @@ async function processVideo() {
 async function fetchVideoData(platform, url) {
     const encodedUrl = encodeURIComponent(url);
     
-    // Múltiplas APIs para redundância
     const apis = {
         youtube: [
             `https://api.dlpanda.com/video?url=${encodedUrl}`,
-            `https://api.akuari.my.id/downloader/yt1?link=${encodedUrl}`,
-            `https://yt.lemnoslife.com/videos?part=snippet,contentDetails&id=${extractVideoId(url)}`
+            `https://api.akuari.my.id/downloader/yt1?link=${encodedUrl}`
         ],
         facebook: [
             `https://api.fdownloader.net/api?url=${encodedUrl}`,
@@ -105,19 +100,17 @@ async function fetchVideoData(platform, url) {
             if (!response.ok) continue;
             
             const data = await response.json();
-            
-            // Normalizar dados da API
             return normalizeData(data, platform);
         } catch (e) {
-            console.log('API failed:', apiUrl, e.message);
+            console.log('API falhou:', apiUrl);
             continue;
         }
     }
     
-    // Fallback: retornar dados simulados para demonstração
+    // Fallback
     return {
-        title: 'Vídeo de ' + platform,
-        author: 'Autor Desconhecido',
+        title: 'Vídeo ' + platform,
+        author: 'Autor',
         duration: 'N/A',
         thumbnail: `https://via.placeholder.com/480x360/667eea/ffffff?text=${platform.toUpperCase()}`,
         download_url: url,
@@ -130,13 +123,12 @@ async function fetchVideoData(platform, url) {
 }
 
 function normalizeData(data, platform) {
-    // Normalizar respostas diferentes das APIs
     switch(platform) {
         case 'youtube':
             return {
                 title: data.title || data.snippet?.title || 'YouTube Video',
                 author: data.author || data.snippet?.channelTitle || 'Unknown',
-                duration: data.duration || data.contentDetails?.duration || 'N/A',
+                duration: data.duration || 'N/A',
                 thumbnail: data.thumbnail || data.snippet?.thumbnails?.high?.url || '',
                 download_url: data.download_url || data.url || '',
                 formats: data.formats || []
@@ -144,7 +136,7 @@ function normalizeData(data, platform) {
         case 'facebook':
             return {
                 title: data.title || 'Facebook Video',
-                author: data.author || 'Facebook User',
+                author: data.author || 'Facebook',
                 duration: data.duration || 'N/A',
                 thumbnail: data.thumbnail || '',
                 download_url: data.download_url || data.sd || data.hd || '',
@@ -153,7 +145,7 @@ function normalizeData(data, platform) {
         case 'tiktok':
             return {
                 title: data.title || data.desc || 'TikTok Video',
-                author: data.author || data.author?.nickname || 'TikTok User',
+                author: data.author?.nickname || 'TikTok',
                 duration: data.duration || 'N/A',
                 thumbnail: data.cover || data.thumbnail || '',
                 download_url: data.play || data.download_url || '',
@@ -164,58 +156,54 @@ function normalizeData(data, platform) {
     }
 }
 
-function extractVideoId(url) {
-    const match = url.match(/(?:v=|\/)([0-9A-Za-z_-]{11})/);
-    return match ? match[1] : '';
-}
-
 function displayResult(data, platform, originalUrl) {
     const result = document.getElementById('result');
     const videoInfo = document.getElementById('videoInfo');
     const downloadLinks = document.getElementById('downloadLinks');
 
-    // Info do vídeo
     videoInfo.innerHTML = `
-        <img src="${data.thumbnail || 'https://via.placeholder.com/480x360?text=No+Thumbnail'}" 
-             class="video-thumb" alt="Thumbnail" onerror="this.src='https://via.placeholder.com/480x360/667eea/ffffff?text=Video'">
+        <img src="${data.thumbnail || 'https://via.placeholder.com/480x360/667eea/ffffff?text=Video'}" 
+             class="video-thumb" alt="Thumbnail" 
+             onerror="this.src='https://via.placeholder.com/480x360/667eea/ffffff?text=Video'">
         <div class="video-details">
-            <h3>${data.title || 'Vídeo sem título'}</h3>
+            <h3>${data.title || 'Vídeo'}</h3>
             <p>⏱ ${data.duration || 'N/A'} | 👤 ${data.author || 'Desconhecido'} | 📺 ${platform.toUpperCase()}</p>
-            <p style="margin-top:8px;color:var(--primary);font-weight:600;">✅ Pronto para download!</p>
+            <p style="margin-top:8px;color:#667eea;font-weight:600;">✅ Pronto para download!</p>
         </div>
     `;
 
-    // Mostrar ads antes do download (obrigatório ver/interagir)
+    // Ads antes do download
     document.getElementById('ads-before-download').style.display = 'block';
-    AdsManager.customAds.render('ads-before-content', 2); // Ad diferente
+    if (typeof AdsManager !== 'undefined') {
+        AdsManager.customAds.render('ads-before-content', 2);
+    }
 
-    // Links de download
     let linksHtml = '';
     
     if (selectedFormat === 'mp3') {
-        // Conversão para MP3 (usar serviço de terceiros ou indicar)
+        // MP3 - Usar serviço externo de conversão
         linksHtml += `
             <div class="download-item">
                 <div class="format-info">
                     <span class="format-badge">MP3</span>
-                    <span>Áudio 128kbps - Extraído do vídeo</span>
+                    <span>Áudio 128kbps</span>
                 </div>
-                <a href="https://ytmp3.cc/${encodeURIComponent(originalUrl)}" class="btn-get" target="_blank">
-                    🎵 Converter & Baixar MP3
-                </a>
+                <button class="btn-get" onclick="forceDownload('https://ytmp3.cc/${encodeURIComponent(originalUrl)}', '${sanitizeFilename(data.title)}.mp3')">
+                    🎵 Baixar MP3
+                </button>
             </div>
             <div class="download-item">
                 <div class="format-info">
                     <span class="format-badge">MP3</span>
-                    <span>Áudio 320kbps - Alta Qualidade</span>
+                    <span>Áudio 320kbps HQ</span>
                 </div>
-                <a href="https://y2mate.is/${encodeURIComponent(originalUrl)}" class="btn-get" target="_blank">
-                    🎵 HQ MP3
-                </a>
+                <button class="btn-get" onclick="window.open('https://y2mate.is/${encodeURIComponent(originalUrl)}', '_blank')">
+                    🎵 Abrir Conversor HQ
+                </button>
             </div>
         `;
     } else {
-        // MP4 em várias qualidades
+        // MP4 - Várias qualidades
         const qualities = [
             { label: '1080p Full HD', q: '1080', badge: 'FHD', color: '#ff4757' },
             { label: '720p HD', q: '720', badge: 'HD', color: '#2ed573' },
@@ -228,59 +216,130 @@ function displayResult(data, platform, originalUrl) {
                                data.download_url || 
                                originalUrl;
             
+            const filename = sanitizeFilename(data.title) + '_' + q.q + '.mp4';
+            
             linksHtml += `
                 <div class="download-item">
                     <div class="format-info">
                         <span class="format-badge" style="background:${q.color}">${q.badge}</span>
                         <span>${q.label} MP4</span>
                     </div>
-                    <a href="${downloadUrl}" class="btn-get" target="_blank" download 
-                       onclick="trackDownload('${q.label}')">
+                    <button class="btn-get" onclick="forceDownload('${downloadUrl}', '${filename}')">
                         ⬇️ Baixar ${q.label}
-                    </a>
+                    </button>
                 </div>
             `;
         });
     }
 
-    // Link direto alternativo
-    linksHtml += `
-        <div class="download-item" style="background:#fff3e0;border-left-color:#ff9800;">
-            <div class="format-info">
-                <span class="format-badge" style="background:#ff9800;">🔗</span>
-                <span>Link Direto do Vídeo</span>
-            </div>
-            <a href="${originalUrl}" class="btn-get" style="background:#ff9800;" target="_blank">
-                Abrir Original
-            </a>
-        </div>
-    `;
-
     downloadLinks.innerHTML = linksHtml;
     result.classList.add('active');
-    
-    // Scroll para resultado
     result.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function trackDownload(quality) {
-    // Track no Firebase
-    const today = new Date().toISOString().split('T')[0];
-    statsRef.child(`downloads/${today}`).transaction(count => (count || 0) + 1);
+// ===== FUNÇÃO PRINCIPAL: FORÇAR DOWNLOAD EM VEZ DE ABRIR =====
+async function forceDownload(url, filename) {
+    console.log('⬇️ Iniciando download:', filename);
     
-    if (currentUser) {
-        usersRef.child(currentUser.uid + '/downloadsCount').transaction(count => (count || 0) + 1);
+    const btn = event.target;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '⏳ Baixando...';
+    btn.disabled = true;
+    
+    try {
+        // Tentativa 1: Fetch + Blob (funciona com CORS permitido)
+        const response = await fetch(url, { 
+            method: 'GET',
+            mode: 'cors',
+            cache: 'no-cache'
+        });
+        
+        if (!response.ok) throw new Error('CORS bloqueado');
+        
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        
+        window.URL.revokeObjectURL(blobUrl);
+        
+        console.log('✅ Download via Blob OK');
+        trackDownload(filename);
+        
+    } catch (e) {
+        console.log('⚠️ CORS bloqueado, tentando método alternativo...');
+        
+        // Tentativa 2: Abrir em nova aba com parâmetro download
+        const newWindow = window.open(url + '?download=1', '_blank');
+        
+        if (!newWindow || newWindow.closed) {
+            // Tentativa 3: Criar link invisível
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => document.body.removeChild(a), 100);
+        }
+        
+        trackDownload(filename);
     }
     
-    // Track no Analytics
-    analytics.logEvent('video_download', {
-        platform: detectPlatform(document.getElementById('videoUrl').value),
-        format: selectedFormat,
-        quality: quality
-    });
+    btn.innerHTML = '✅ Baixado!';
+    setTimeout(() => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }, 2000);
 }
 
-function saveDownloadToFirebase(data, platform) {
+// Sanitizar nome do arquivo
+function sanitizeFilename(name) {
+    if (!name) return 'video';
+    return name
+        .replace(/[<>:"/\\\\|?*]/g, '_')
+        .replace(/\\s+/g, '_')
+        .substring(0, 50);
+}
+
+// Track download no Firebase
+async function trackDownload(filename) {
+    const today = new Date().toISOString().split('T')[0];
+    
+    if (window.firebaseDatabase) {
+        const { ref, get, set } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js");
+        
+        const countRef = ref(window.firebaseDatabase, 'bebanev_downloader/stats/downloads/' + today);
+        const snap = await get(countRef);
+        await set(countRef, (snap.val() || 0) + 1);
+        
+        if (window.currentUser) {
+            const userRef = ref(window.firebaseDatabase, 'bebanev_downloader/users/' + window.currentUser.uid + '/downloadsCount');
+            const userSnap = await get(userRef);
+            await set(userRef, (userSnap.val() || 0) + 1);
+        }
+    }
+    
+    if (window.firebaseAnalytics) {
+        const { logEvent } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js");
+        logEvent(window.firebaseAnalytics, 'video_download', {
+            platform: detectPlatform(document.getElementById('videoUrl').value),
+            format: selectedFormat
+        });
+    }
+}
+
+async function saveDownloadToFirebase(data, platform) {
+    if (!window.firebaseDatabase) return;
+    
+    const { ref, push } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js");
+    
     const downloadData = {
         title: data.title || 'Unknown',
         platform: platform,
@@ -288,15 +347,15 @@ function saveDownloadToFirebase(data, platform) {
         url: document.getElementById('videoUrl').value,
         timestamp: Date.now(),
         date: new Date().toISOString().split('T')[0],
-        userId: currentUser ? currentUser.uid : 'anonymous'
+        userId: window.currentUser ? window.currentUser.uid : 'anonymous'
     };
     
-    downloadsRef.push(downloadData);
+    await push(ref(window.firebaseDatabase, 'bebanev_downloader/downloads'), downloadData);
 }
 
 function addToHistory(title, platform, format) {
     downloadHistory.unshift({
-        title: title.substring(0, 60) + (title.length > 60 ? '...' : ''),
+        title: (title || 'Vídeo').substring(0, 60),
         platform,
         format,
         date: new Date().toLocaleString('pt-BR')
@@ -338,32 +397,17 @@ function showError(msg) {
     }
 }
 
-// Estatísticas em tempo real
-function updateStats() {
-    statsRef.child('downloads/' + new Date().toISOString().split('T')[0]).on('value', snap => {
-        document.getElementById('totalDownloads').textContent = snap.val() || 0;
-    });
-    
-    // Contar usuários online (últimos 5 minutos)
-    const fiveMinAgo = Date.now() - (5 * 60 * 1000);
-    usersRef.orderByChild('lastActive').startAt(fiveMinAgo).on('value', snap => {
-        document.getElementById('totalUsers').textContent = snap.numChildren() || 0;
-    });
-}
-
 // Inicializar
 document.addEventListener('DOMContentLoaded', () => {
     updateHistoryDisplay();
-    updateStats();
     
-    // Permitir Ctrl+V automático
+    // Auto-paste
     document.addEventListener('paste', (e) => {
         if (document.activeElement.id !== 'videoUrl') {
             const text = e.clipboardData.getData('text');
             if (detectPlatform(text)) {
                 document.getElementById('videoUrl').value = text;
-                // Auto-start após 1 segundo
-                setTimeout(() => processVideo(), 1000);
+                setTimeout(() => processVideo(), 800);
             }
         }
     });
